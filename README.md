@@ -24,7 +24,7 @@ Repositorio de la parte práctica del taller donde desarrollamos el diseño de e
 
 ![Flujo de un cambio en un modelo predictivo de DEV a PROD](docs/img/flujo_cambio_datacorp.png)
 
-**Si la imagen no se logra visualizar en este archivo README, revisar el documento Word anexado a la tarea de la parte práctica.**
+**Si la imagen del flujo no se logra visualizar en este archivo README, revisar en los docs de la entrega del taller practico**
 
 **Explicación de cada etapa**
 
@@ -64,3 +64,104 @@ Repositorio de la parte práctica del taller donde desarrollamos el diseño de e
 **Validaciones que habrían evitado el problema:** validación de esquema y tipos (Great Expectations), calidad de datos (nulos, rangos, duplicados), umbrales de métricas contra un modelo base, pruebas de regresión contra la versión en PROD y detección de drift.
 
 **Por qué no llega a producción:** la promoción exige que todas las pruebas de staging pasen, además hay aprobación manual antes de PROD y, finalmente, PROD solo acepta versiones etiquetadas desplegadas por el pipeline.
+
+## Actividad 2: Implementación de MDM
+
+### 2.1 Entidades maestras de DataCorp Analytics
+
+| Entidad maestra | Atributos clave | Fuentes de datos | Reglas de calidad | Data owner |
+|---|---|---|---|---|
+| Cliente | id_cliente_maestro, tipo y número de documento, nombres, correo, teléfono, ciudad, fecha de registro, estado_cliente | CRM, e-commerce, POS de las tiendas, programa de fidelización | Documento único y válido, correo con formato válido, teléfono normalizado (+57), sin duplicados y campos obligatorios completos | Director Comercial |
+| Producto | id_producto_maestro, SKU, descripción, categoría, marca, precio de lista, unidad de medida, estado | ERP, catálogo de proveedores, e-commerce | SKU único; categoría dentro de la taxonomía oficial; precio mayor a 0; sin descripciones vacías | Gerente de Categorías |
+| Proveedor | id_proveedor_maestro, NIT, razón social, contacto, condiciones de pago, país, estado | ERP, módulo de compras, contratos | NIT único y válido; razón social normalizada y contacto | Director de Compras |
+| Ubicación (tienda o sucursal) | id_ubicacion, nombre, tipo (tienda, bodega, online), dirección, ciudad, coordenadas, región, estado | ERP, POS, sistema de logística | Dirección estandarizada, coordenadas válidas, ciudad y región, código único | Director de Operaciones |
+| Finanzas | id_centro_costo, cuenta contable, descripción, moneda, responsable, vigencia | ERP financiero, sistema contable | Código único, moneda válida (COP, USD), vigencia coherente (fecha inicio menor que fecha fin), responsable asignado | Director Financiero (CFO) |
+
+### 2.2 Flujo de consolidación hacia el registro maestro
+
+![Flujo de consolidación MDM de DataCorp Analytics](docs/img/flujo_mdm_datacorp.png)
+
+**Si la imagen del flujo no se logra visualizar en este archivo README, revisar en los docs de la entrega del taller practico**
+
+**Explicación de cada componente**
+
+1. **Fuentes transaccionales:** CRM, ERP, POS, e-commerce y archivos de proveedores. Cada una guarda los datos a su manera, con formatos y claves distintas.
+2. **Ingesta a zona de staging:** los datos se copian sin modificarlos a una zona de paso, para no afectar a los sistemas de origen.
+3. **Limpieza y estandarización:** se corrigen formatos (fechas, teléfonos, direcciones), se eliminan espacios y se unifican catálogos.
+4. **Validación de calidad:** se aplican las reglas del punto 2.1. Los registros que no cumplen van a una cola de excepciones que revisa el data steward.
+5. **Matching y deduplicación:** se identifican registros que representan a la misma entidad (por ejemplo, el mismo cliente en CRM y POS).
+6. **Resolución de conflictos (survivorship):** cuando hay valores distintos para un mismo atributo, se elige el correcto según reglas definidas (fuente más confiable o dato más reciente).
+7. **Registro maestro (golden record):** versión única y confiable de cada entidad, con identificador maestro y trazabilidad de su origen. Aquí actúa la gobernanza: los cambios requieren aprobación.
+8. **Sincronización hacia sistemas transaccionales:** el registro maestro se publica de vuelta a CRM, ERP y POS para que todos usen los mismos datos.
+9. **Sincronización hacia sistemas analíticos:** el registro maestro alimenta el data warehouse, el feature store y los dashboards, de modo que los modelos y reportes se construyen sobre la misma fuente de la verdad.
+
+### 2.3 Políticas de gobernanza del dato maestro "Cliente"
+
+**1. Definición de "cliente activo"**
+
+Cliente que tiene al menos una compra completada (no cancelada ni devuelta) en los últimos 12 meses contados desde la fecha de corte.
+
+| Estado | Criterio |
+|---|---|
+| Activo | Última compra completada hace 12 meses o menos |
+| Inactivo | Última compra hace más de 12 y hasta 24 meses |
+| Perdido | Última compra hace más de 24 meses |
+| Prospecto | Registrado pero sin compras |
+
+**2. Reglas de limpieza y duplicación**
+**Puntuaciones referidas por Claude**
+
+- Nombres: sin espacios dobles, en formato Título; sin caracteres especiales.
+- Correo: en minúsculas y con formato válido.
+- Teléfono: formato nacional.
+- Documento: tipo y número obligatorios; no se admiten ceros ni valores de prueba.
+- Duplicados exactos: mismo tipo y número de documento. Se fusionan automáticamente.
+- Duplicados probables: coincidencia aproximada de nombre, fecha de nacimiento y correo, con puntuación de similitud:
+  - Mayor o igual a 0.95: fusión automática.
+  - Entre 0.80 y 0.95: revisión manual del data.
+  - Menor a 0.80: revisión manual para confirmar que son registros distintos.
+- Todas las fusiones quedan registradas y se pueden revertir.
+- Regla de supervivencia: ante conflictos prevalece el dato verificado más reciente de la fuente más confiable.
+
+**3. Flujo de aprobación para cambios**
+
+1. Solicitud de cambio (usuario autorizado o proceso automático).
+2. Validación automática de las reglas de calidad.
+3. Revisión del data steward de Clientes.
+4. Aprobación del data owner (Director Comercial) si el cambio afecta atributos críticos (documento, estado, definición de cliente activo).
+5. Publicación en el registro maestro y sincronización a los sistemas.
+6. Registro en el log de auditoría (quién, qué, cuándo y por qué).
+
+**4. Políticas de acceso y seguridad**
+
+- Control de acceso por roles y principio de mínimo privilegio.
+- Solo el data steward y los procesos autorizados escriben en el maestro; los demás roles tienen lectura.
+- Datos personales (PII) anonimizados en DEV y QA.
+- Cifrado en reposo y en tránsito.
+- Auditoría constante de accesos y cambios.
+- Cumplimiento de la Ley 1581 de 2012: autorización del titular, derecho de consulta, rectificación y supresión, y tiempos de retención definidos.
+
+### 2.4 Simulación: conflicto en la definición de "cliente activo"
+
+**Escenario (datos hipotéticos):** dos fuentes manejan definiciones distintas.
+
+| Fuente | Definición de "cliente activo" | Clientes activos reportados |
+|---|---|---|
+| CRM (área de Marketing) | Inició sesión o abrió un correo en los últimos 90 días | 120.000 |
+| ERP/POS (área Comercial) | Realizó al menos una compra en los últimos 12 meses | 85.000 |
+
+**Problema:** el modelo de predicción de abandono se entrenó con la definición del CRM, y el dashboard de ventas usa la del ERP. Los reportes no coinciden, la dirección desconfía de las cifras y nadie puede explicar por qué el modelo da otros resultados.
+
+**Cómo lo resuelve MDM**
+
+1. **Detección:** el proceso de matching evidencia que el mismo atributo tiene reglas distintas en cada fuente.
+2. **Decisión de gobernanza:** el comité de gobernanza, con el data owner de Cliente, define una única definición oficial con la compra completada en los últimos 12 meses.
+3. **Cálculo centralizado:** el atributo estado_cliente se calcula una sola vez en el registro maestro y se distribuye a todos los sistemas.
+4. **Atributos separados:** la definición del CRM no se pierde solo se conserva con otro nombre (usuario_activo_app) para evitar confusiones.
+5. **Versionado:** la definición queda documentada como v1.0 con fecha de vigencia en el glosario.
+
+**Impacto en la replicabilidad de modelos**
+
+- Cada modelo registra la versión de la definición con la que se entrenó (por ejemplo, `definicion_cliente_activo=v1.0`)
+- Si la definición cambia a v2.0, los modelos antiguos pueden recrearse con v1.0 y compararse con los nuevos.
+- Sin MDM no se podría saber con cuál definición se entrenó cada modelo, y los resultados serían imposibles de replicar.
