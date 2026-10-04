@@ -335,3 +335,94 @@ terraform apply tfplan
 5. **Validación de sintaxis:** el pipeline ejecuta `terraform fmt -check`, `terraform validate` y `terraform plan`. Si falla, el cambio vuelve a edición. Estas mismas validaciones corren como chequeo del PR.
 6. **Despliegue:** `terraform apply` del plan aprobado. DEV y QA se despliegan automáticamente y PROD requiere aprobación manual.
 7. **Verificación:** se comprueba que la infraestructura coincide con el código y se actualiza el estado remoto.
+
+
+
+## Actividad 5: Continuous Delivery para DataOps
+
+### 5.1 Pipeline de CD para el modelo de predicción de ventas
+
+El pipeline se dispara con cada merge a `main` y lleva el modelo de predicción de ventas desde el código hasta producción en seis etapas. Una etapa solo corre si la anterior pasó.
+
+| Etapa | Qué hace |
+|---|---|
+| 1. Build & Test | Instala dependencias, revisa el estilo del código y ejecuta las pruebas unitarias del código |
+| 2. Test de Datos | Valida la calidad de los datos de entrada antes de usarlos |
+| 3. Train & Validate | Entrena el modelo y valida que su desempeño cumpla los umbrales |
+| 4. Empaquetado | Construye el artefacto versionado del modelo (imagen Docker) y lo publica |
+| 5. Despliegue en Staging | Despliega en QA y ejecuta pruebas de integración y regresión con datos anonimizados |
+| 6. Despliegue en Producción | Libera a clientes de forma gradual, con aprobación manual y monitoreo |
+
+
+### 5.2 Herramientas, criterios de éxito y acciones en caso de fallo
+
+| Etapa | Herramientas sugeridas | Criterios de éxito | Acción en caso de fallo |
+|---|---|---|---|
+| 1. Build & Test | GitHub Actions o Jenkins, pytest, flake8 | Instalación sin errores; todas las pruebas pasan, cobertura mayor o igual a 80 % | Se detiene el pipeline, se notifica al autor y el merge queda bloqueado hasta corregir |
+| 2. Test de Datos | Great Expectations o Pandera, pandas | Nulos menores o iguales a 10 % por columna, esquema y tipos correctos, fechas en formato válido, sin duplicados en las claves, valores dentro de rangos | Se detiene antes de entrenar, se pone el lote en cuarentena, se alerta al data steward y finalmente se abre un ticket |
+| 3. Train & Validate | scikit-learn o XGBoost, MLflow, DVC | MAPE menor o igual a 15 %, resultado reproducible (semilla fija y datos versionados) | El modelo no se registra ni se promueve; se mantiene el modelo de producción y se analizan las causas (datos, variables, parámetros) |
+| 4. Empaquetado | Docker, MLflow Model Registry, Trivy | La imagen se construye; versión semántica (`vX.Y.Z`),prueba de arranque del contenedor | No se publica el artefacto; se corrigen dependencias o vulnerabilidades |
+| 5. Despliegue en Staging | Terraform, Docker, GitHub Actions | Pruebas de integración y regresión superadas, latencia dentro del límite acordado, resultados coherentes con producción | Rollback automático a la versión anterior de staging y bloqueo de la promoción a PROD |
+| 6. Despliegue en Producción | Aprobación manual| Aprobación del responsable, smoke tests correctos, tasa de errores y latencia normales durante la ventana de observación | Rollback automático a la versión anterior, registro del incidente y post-mortem sin culpables |
+
+### 5.3 Simulación de falla en "Test de Datos"
+
+Escenario: el lote `ventas_2026-10` llega con la columna `unidades` con 18 % de valores nulos, por encima del umbral permitido (10 %). Probablemente una de las tiendas dejó de enviar el dato.
+
+
+**Protocolo de actuación**
+
+| Paso | Acción | Herramienta |
+|---|---|---|
+| 1. Detección | La validación calcula 18 % de nulos en `unidades` (límite 10 %) y marca la etapa como fallida | Great Expectations, `validate_data.py` |
+| 2. Bloqueo | El pipeline se detiene entonces no se ejecutan Train & Validate, empaquetado ni los despliegues | GitHub Actions (`needs`) |
+| 3. Cuarentena | El lote se aparta y no se usa para entrenar; el modelo en producción sigue operando | Bucket de cuarentena en S3 |
+| 4. Notificación | Alerta con el detalle de la columna y el porcentaje al data steward y al equipo | Slack o correo desde el pipeline |
+| 5. Diagnóstico | Se rastrea el origen con la procedencia de datos y se identifica qué fuente falló | `docs/procedencia/`, logs |
+| 6. Corrección | Se corrige en la fuente o se aplica una regla de imputación aprobada por gobernanza, y se reprocesa | Equipo de datos, MDM |
+| 7. Reintento | El pipeline vuelve a correr desde la etapa 1 con el lote corregido | CI/CD |
+| 8. Registro | Se documenta el incidente y se evalúa reforzar las reglas de calidad | Issue de GitHub |
+
+¿Cómo se evita que el modelo llegue a producción?
+
+1. Cada etapa depende de la anterior: si el test de datos falla, las siguientes nunca se ejecutan.
+2. No se genera ningún modelo ni artefacto nuevo, así que no hay nada que desplegar.
+3. El despliegue a producción exige además aprobación manual y que staging haya pasado.
+4. Se evita el principio "Garbage in, garbage out": un modelo entrenado con datos defectuosos produciría predicciones poco confiables.
+
+### 5.4 Pipeline completo con los tres pilares
+**Para el flujo del pipeline usamos Claude para el código en mermaid**
+
+```mermaid
+flowchart TD
+    subgraph VC["Pilar 1: Control de versiones"]
+        A["Commit y push a feature branch"] --> B["Pull Request y revisión"]
+        B --> C["Merge a main"]
+    end
+    subgraph IAC["Pilar 2: Infraestructura como Código"]
+        I1["terraform plan"] --> I2["terraform apply: entornos DEV, QA y PROD"]
+    end
+    subgraph CD["Pilar 3: Continuous Delivery"]
+        D1["1. Build & Test"] --> D2["2. Test de Datos"] --> D3["3. Train & Validate"] --> D4["4. Empaquetado"] --> D5["5. Despliegue en Staging"] --> D6["6. Despliegue en Producción"]
+    end
+    C --> D1
+    C --> I1
+    I2 -. provisiona .-> D5
+    I2 -. provisiona .-> D6
+    D6 --> L["Disponible en vivo y monitoreo"]
+    D1 -. falla .-> F["Detener, notificar y volver a la rama"]
+    D2 -. falla .-> F
+    D3 -. falla .-> F
+    D5 -. falla .-> F
+    F -.-> A
+```
+
+**Cómo se integran los tres pilares**
+
+| Pilar | Dónde aparece en el diagrama | Aporte |
+|---|---|---|
+| Control de versiones | Commit, Pull Request y merge a `main` | Todo cambio queda trazable, revisado y reversible; el merge dispara el pipeline |
+| Infraestructura como Código | `terraform plan` y `terraform apply` | Crea entornos idénticos (DEV, QA, PROD) y los usa el despliegue en staging y producción |
+| Continuous Delivery | Las seis etapas del pipeline | Automatiza las validaciones y promociones, con puertas de control antes de producción |
+
+Los tres forman una tripleta: sin control de versiones no hay qué automatizar, sin IaC los entornos no son reproducibles y sin CD las validaciones dependen de pasos manuales propensos a error.
