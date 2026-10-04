@@ -281,3 +281,59 @@ Closes #1
 - Si QA falla, la promoción a PROD se bloquea y se abre un nuevo ciclo de corrección.
 - Si QA pasa, se etiqueta la versión (`vX.Y.Z`) y, con aprobación manual, se libera a producción.
 
+**Para la actividad 4 nuevamente nos estuvimos guiando de explicaciones de Claude para los archivos de infraestructura en Terraform y la creación del nuevo archivo de salidas**
+
+## Actividad 4: Infraestructura como Código (IaC)
+
+### 4.1 Archivo Terraform (simulado)
+
+El código está en [`infrastructure/terraform/`](infrastructure/terraform/): main.tf , variables.tf y outputs.tf.
+
+| Recurso Terraform | Entorno | Qué hace | Decisiones de seguridad |
+|---|---|---|---|
+| `aws_s3_bucket.staging_data` | QA/Staging | Almacena los datos de staging | Versionado activado, cifrado AES256 y acceso público bloqueado |
+| `aws_instance.dev` | DEV | Máquina de trabajo del equipo de datos | IMDSv2 obligatorio y rol con permisos mínimos |
+| `aws_db_instance.prod` | PROD | Base de datos de producción (PostgreSQL) | Multi-AZ, cifrada, no pública, backups de 7 días, protección contra borrado y contraseña gestionada por Secrets Manager |
+| `aws_iam_role.dev_ec2_role` | DEV | Identidad de la instancia de DEV | Solo puede listar, leer y escribir en el bucket de staging |
+
+Los recursos están conectados entre sí y la política del rol IAM hace referencia al bucket, la instancia usa el rol mediante un perfil. Terraform deduce ese orden por si solo.
+
+### 4.2 Cómo se replican entornos idénticos
+
+Este archivo describe la infraestructura de forma declarativa y permite replicar los entornos porque:
+
+- Es reproducible ya que el mismo código con las mismas variables produce siempre la misma infraestructura, sin configuración manual.
+- Es parametrizable porque cambiando variables se crea una copia en otra cuenta o región.
+- Está versionado en Git entonces se sabe quién cambió qué y se puede volver a una versión anterior.
+- El estado de Terraform compara lo que existe con lo que dice el código y solo aplica las diferencias.
+- Un científico de datos nuevo obtiene su entorno de DEV en minutos con un solo comando, en vez de días de instalación manual.
+
+**Comandos para aplicar los cambios**
+
+```bash
+terraform init                      # descarga el proveedor y prepara el directorio
+terraform fmt -check                # revisa el formato del código
+terraform validate                  # valida la sintaxis y la coherencia
+terraform plan -out=tfplan          # muestra qué se creará, cambiará o destruirá
+terraform apply tfplan              # aplica exactamente el plan aprobado
+terraform destroy                   # elimina la infraestructura (solo en entornos no productivos)
+```
+
+Para crear una réplica con otro nombre y región:
+
+```bash
+terraform plan -var "project=datacorp-qa" -var "region=us-east-2" -out=tfplan
+terraform apply tfplan
+```
+
+### 4.3 Flujo de trabajo de IaC
+
+![Flujo de trabajo de IaC](docs/img/flujo_iac_datacorp.png)
+
+1. **Edición de código:** se modifica el Terraform en una rama `feature/infra-*`, nunca directo en `main`.
+2. **Control de versiones:** se hace commit y push; el historial registra quién, qué y por qué.
+3. **Revisión:** se abre un Pull Request; un revisor verifica seguridad, costos y coherencia con las políticas.
+4. **Integración:** con la aprobación se hace merge a `main`, que dispara el pipeline.
+5. **Validación de sintaxis:** el pipeline ejecuta `terraform fmt -check`, `terraform validate` y `terraform plan`. Si falla, el cambio vuelve a edición. Estas mismas validaciones corren como chequeo del PR.
+6. **Despliegue:** `terraform apply` del plan aprobado. DEV y QA se despliegan automáticamente y PROD requiere aprobación manual.
+7. **Verificación:** se comprueba que la infraestructura coincide con el código y se actualiza el estado remoto.
