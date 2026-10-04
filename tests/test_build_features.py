@@ -8,3 +8,10 @@ def test_formato_iso():
     out = add_season_features(df)
     assert out.loc[0, "mes"] == 9
     assert out.loc[0, "trimestre"] == 3
+
+
+def test_formato_dd_mm_yyyy():
+    df = pd.DataFrame({"fecha_venta": ["15/09/2026"]})
+    out = add_season_features(df)
+    assert out.loc[0, "mes"] == 9
+    assert out.loc[0, "trimestre"] == 3
