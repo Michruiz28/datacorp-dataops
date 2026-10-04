@@ -504,6 +504,8 @@ El plan durará 24 semanas y avanzará por etapas. En las primeras dos semanas r
 
 Solicitamos a la Dirección aprobar el inicio de la Fase 0, designar a los dueños de datos de cada entidad maestra y autorizar la restricción de la escritura directa en producción.
 
+**Para el flujo del pipeline usamos Claude para el código en mermaid para mostrar la arquitectura DataOps** 
+
 ### 6.4 Arquitectura DataOps completa de DataCorp Analytics
 
 ```mermaid
