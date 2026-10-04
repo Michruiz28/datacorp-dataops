@@ -165,3 +165,119 @@ Cliente que tiene al menos una compra completada (no cancelada ni devuelta) en l
 - Cada modelo registra la versión de la definición con la que se entrenó (por ejemplo, `definicion_cliente_activo=v1.0`)
 - Si la definición cambia a v2.0, los modelos antiguos pueden recrearse con v1.0 y compararse con los nuevos.
 - Sin MDM no se podría saber con cuál definición se entrenó cada modelo, y los resultados serían imposibles de replicar.
+
+### Para el desarrollo de este punto, nos estuvimos guiando frecuentemente con Claude para la creación de los archivos YAML, pipelines e infraestructura en Terraform ya que es la primera vez trabajando con una simulación de control de versiones 
+
+## Actividad 3: Control de Versiones para Todo
+
+### 3.1 Estructura del repositorio
+
+```text
+datacorp-datops/
+├── README.md
+├── requirements.txt
+├── .gitignore
+├── .github/
+│   ├── pull_request_template.md
+│   └── workflows/ci.yml
+├── src/
+│   ├── features/build_features.py
+│   ├── models/train_model.py
+│   └── data_quality/validate_data.py
+├── notebooks/01_exploracion_ventas.py
+├── sql/create_dim_cliente.sql
+├── tests/test_build_features.py
+├── config/
+│   ├── dev.yaml
+│   ├── qa.yaml
+│   ├── prod.yaml
+│   └── model_params.yaml
+├── pipelines/
+│   ├── Jenkinsfile
+│   └── airflow/dags/ventas_forecast_dag.py
+├── infrastructure/terraform/
+│   ├── main.tf
+│   └── variables.tf
+├── data/
+│   ├── README.md
+│   └── raw/ventas_2026-09.csv.dvc   (puntero; el dato real no está en Git)
+└── docs/
+    ├── img/
+    └── procedencia/lineage_ventas.yaml
+```
+
+| Carpeta o archivo | Qué contiene | Categoría pedida |
+|---|---|---|
+| `src/`, `notebooks/`, `sql/`, `tests/` | Scripts Python, notebooks exportados a `.py`, consultas SQL y pruebas | Código |
+| `config/` | Parámetros por entorno y del modelo en YAML | Configuraciones |
+| `pipelines/` | DAG de Airflow y Jenkinsfile | Definiciones de pipeline |
+| `infrastructure/terraform/` | Definición de la infraestructura | Infraestructura como código |
+| `data/` y `docs/procedencia/` | Punteros a datos y documentación de su origen | Procedencia de datos |
+| `.github/` | Plantilla de Pull Request y flujo de CI | Control y automatización |
+
+Los notebooks se versionan exportados a `.py` (celdas `# %%`) para evitar subir salidas con datos reales y para que los cambios sean legibles en Git.
+
+### 3.2 Qué se versiona, qué no y por qué
+
+**Que si se versiona**
+
+| Elemento | Por qué |
+|---|---|
+| Código (Python, SQL, notebooks exportados a .py) | Permite saber quién cambió qué y volver a una versión anterior |
+| Configuraciones YAML por entorno | Un cambio de configuración puede alterar los resultados tanto como uno de código |
+| Definiciones de pipeline (DAGs, Jenkinsfile) | Si el pipeline cambia sin registro, no se puede reproducir un resultado pasado |
+| Infraestructura (Terraform) | Permite recrear entornos idénticos |
+| Pruebas | Garantizan que el comportamiento esperado se conserve |
+| Punteros de datos (`.dvc`) y documentación de procedencia | Indican con qué versión exacta de datos se obtuvo un resultado |
+| Definiciones de negocio (por ejemplo, "cliente activo" v1.0) | Un modelo solo es replicable si se sabe con qué definición se entrenó |
+
+**Que no se versiona**
+
+| Elemento | Por qué | Qué se hace en su lugar |
+|---|---|---|
+| Datos en bruto | Son pesados, cambian con frecuencia y pueden contener PII | Se guardan en almacenamiento (S3) y en Git se versiona un puntero `.dvc` con el hash |
+| Modelos entrenados y archivos pesados | Hacen crecer el repositorio sin aportar trazabilidad de cambios | Se registran en un model registry (MLflow) con referencia al commit |
+| Secretos y credenciales (`.env`, `*.pem`, `*.tfvars`) | Un secreto subido a Git queda en el historial para siempre | Gestor de secretos (AWS Secrets Manager) |
+| Estado de Terraform (`*.tfstate`) | Contiene información sensible | Backend remoto cifrado |
+| Archivos temporales y caché (`__pycache__`, `.venv`) | Se regeneran solos | Se excluyen con `.gitignore` |
+
+**Versionado de la procedencia de datos**
+
+La procedencia (lineage) responde: "¿de dónde salió este resultado y cómo se obtuvo?". Para cada conjunto de datos se versiona un archivo (por ejemplo `docs/procedencia/lineage_ventas.yaml`) con:
+
+- Fuente, fecha de extracción y responsable.
+- Versión del esquema.
+- Transformaciones aplicadas y el commit del código usado.
+- Puntero `.dvc` al dato exacto (hash).
+- Modelos derivados de ese dato.
+
+Así, cualquier modelo o dashboard se puede recrear: mismo commit de código + mismo puntero de datos + misma configuración + misma definición de negocio.
+
+### 3.3 Simulación de commit y Pull Request
+
+Contexto: se corrige el error del punto 1.3 donde la columna `fecha_venta` llega en formato `dd/mm/yyyy` en QA y rompe las variables de temporada.
+
+Solución: En QA llegaban fechas dd/mm/yyyy y el parseo estricto rompía las variables
+de temporada (MAPE de 12 % a 31 %) así que se agregan formatos admitidos y una
+prueba de regresión.
+
+Closes #1
+```
+
+**Flujo de revisión de código**
+
+1. Se crea la rama `fix/formato-fecha-venta` desde `main`.
+2. Se hace el commit con mensaje descriptivo y se sube la rama.
+3. Se abre el Pull Request con la plantilla (qué cambia, por qué, checklist).
+4. Se ejecuta automáticamente el CI: instala dependencias y corre las pruebas.
+5. Un revisor revisa lógica, pruebas, calidad y que no haya datos ni credenciales; deja comentarios o aprueba.
+6. Si hay observaciones, se corrigen con nuevos commits en la misma rama.
+7. Con el CI en verde y la aprobación, se hace el merge a `main` y se elimina la rama.
+
+**Integración con QA**
+
+- El PR dispara el entorno de preview con pruebas automatizadas (unitarias, calidad de datos y métricas del modelo).
+- El merge a `main` promueve el cambio a staging (QA), donde se ejecutan integración, regresión y rendimiento con datos anonimizados.
+- Si QA falla, la promoción a PROD se bloquea y se abre un nuevo ciclo de corrección.
+- Si QA pasa, se etiqueta la versión (`vX.Y.Z`) y, con aprobación manual, se libera a producción.
+
