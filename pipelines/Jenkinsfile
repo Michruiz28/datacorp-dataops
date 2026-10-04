@@ -1,0 +1,9 @@
+pipeline {
+  agent any
+  stages {
+    stage('Build & Test')    { steps { sh 'pip install -r requirements.txt && python -m pytest -q' } }
+    stage('Test de Datos')   { steps { sh 'python src/data_quality/validate_data.py' } }
+    stage('Train & Validate'){ steps { sh 'python src/models/train_model.py' } }
+    stage('Deploy Staging')  { steps { echo 'Despliegue a staging (simulado)' } }
+  }
+}

@@ -1,0 +1,4 @@
+environment: qa
+data:
+  source: s3://datacorp-staging-data/replica/
+  anonymize_pii: true

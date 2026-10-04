@@ -1,0 +1,5 @@
+# Archivo puntero SIMULADO (así se vería con DVC)
+outs:
+- md5: 0000000000000000000000000000simu
+  size: 48211734
+  path: ventas_2026-09.csv

@@ -1,0 +1,4 @@
+environment: dev
+data:
+  source: s3://datacorp-dev-data/sample/
+  anonymize_pii: false   # datos sintéticos

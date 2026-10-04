@@ -1,0 +1,5 @@
+environment: prod
+data:
+  source: rds://datacorp-prod
+  anonymize_pii: false
+  encryption: true

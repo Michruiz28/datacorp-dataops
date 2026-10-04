@@ -1,0 +1,7 @@
+model:
+  name: demand_forecast
+  algorithm: gradient_boosting
+  version: 1.4.0
+thresholds:
+  mape_max: 0.15
+  nulos_max: 0.10

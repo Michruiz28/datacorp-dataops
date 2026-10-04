@@ -1,0 +1,13 @@
+dataset: ventas_2026-09
+version: v1.0
+fuente: ERP / POS de las tiendas
+fecha_extraccion: 2026-10-01
+responsable: Director de Operaciones
+esquema_version: 1.2
+transformaciones:
+  - limpieza_de_fechas (src/features/build_features.py)
+  - validacion_de_nulos (src/data_quality/validate_data.py)
+codigo_commit: pendiente (se reemplaza por el hash del commit usado)
+puntero_datos: data/raw/ventas_2026-09.csv.dvc
+modelos_derivados:
+  - demand_forecast v1.4.0

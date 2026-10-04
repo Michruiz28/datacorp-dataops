@@ -1,0 +1,24 @@
+# Datos en bruto y procesados (se versionan con punteros, no en Git)
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/raw/*.dvc
+
+# Artefactos pesados
+models/*.pkl
+*.parquet
+
+# Secretos y credenciales
+.env
+*.pem
+*.tfvars
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# Python
+__pycache__/
+.ipynb_checkpoints/
+.venv/
