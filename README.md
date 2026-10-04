@@ -262,8 +262,6 @@ de temporada (MAPE de 12 % a 31 %) así que se agregan formatos admitidos y una
 prueba de regresión.
 
 Closes #1
-```
-
 **Flujo de revisión de código**
 
 1. Se crea la rama `fix/formato-fecha-venta` desde `main`.
