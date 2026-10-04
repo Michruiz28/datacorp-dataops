@@ -426,3 +426,156 @@ flowchart TD
 | Continuous Delivery | Las seis etapas del pipeline | Automatiza las validaciones y promociones, con puertas de control antes de producción |
 
 Los tres forman una tripleta: sin control de versiones no hay qué automatizar, sin IaC los entornos no son reproducibles y sin CD las validaciones dependen de pasos manuales propensos a error.
+
+
+## Actividad 6: Integración Final - La Tripleta del Control
+
+### 6.1 Plan de implementación de DataOps para DataCorp Analytics
+
+El plan integra los cinco componentes del taller en cinco fases, con una duración total de 24 semanas.
+
+| Fase | Semanas | Componentes | Actividades principales | Entregables | Responsable |
+|---|---|---|---|---|---|
+| 0. Diagnóstico y gobierno | 1-2 | Base de todo | Inventario de datos y modelos, creación del comité de gobernanza, restricción del acceso de escritura a producción (solo lectura para científicos) | Línea base de métricas; mapa de datos; comité conformado | Líder de DataOps |
+| 1. Entornos aislados + IaC | 3-6 | Entornos aislados, IaC | Definir DEV, QA y PROD con Terraform, roles IAM de mínimo privilegio, datos sintéticos en DEV y réplica anonimizada en QA | Tres entornos reproducibles con un solo comando | Ingeniero de plataforma |
+| 2. Control de versiones | 5-8 | Control de versiones | Estructura del repositorio con ramas y Pull Requests obligatorios, versionado de datos (DVC), modelos (MLflow) y procedencia | 100 % del código, configuración y pipelines en Git | Líder de DataOps |
+| 3. Entrega continua | 9-14 | CD | Pipeline de seis etapas (Build & Test, Test de Datos, Train & Validate, Empaquetado, Staging y Producción); puertas de control y aprobación manual | Pipeline operando para el modelo de predicción de ventas | Ingeniero DataOps |
+| 4. MDM | 7-18 | MDM | registro maestro de cliente, luego Producto, proveedor, ubicación y finanzas; reglas de calidad, data owners y stewards | Registro maestro operativo y políticas de gobernanza vigentes | Data owners y data steward |
+| 5. Integración y cierre | 19-24 | Todos | Migrar los modelos existentes al nuevo flujo, capacitación, medición contra la línea base e informe de resultados | Todos los modelos en el pipeline; evaluación final | Comité de gobernanza |
+
+Cómo se conectan los componentes: los entornos y la IaC dan el lugar donde trabajar mientras que el control de versiones registra todo lo que cambia, la entrega continua automatiza el tránsito entre entornos y el MDM asegura que todos trabajen sobre los mismos datos y definiciones.
+
+### 6.2 Métricas de éxito
+
+Los valores de la línea base son supuestos para el caso de estudio.
+| Componente | Métrica | Línea base| Meta | Cómo se mide |
+|---|---|---|---|---|
+| Entornos aislados | Número de incidentes en producción por mes | 4 | 0 a 1 | Registro de incidentes |
+| Entornos aislados | Cambios que pasan por DEV, QA y PROD antes de liberarse | Casi ninguno | 100 % | Historial del pipeline |
+| Entornos aislados | Cuentas humanas con escritura directa en producción | Todo el equipo | 0 | Auditoría de accesos |
+| MDM | Duplicados en la entidad Cliente | 12 % | Menos de 2 % | Reglas de calidad del registro maestro |
+| MDM | Diferencia entre reportes sobre "clientes activos" | Cerca de 30 % | Menos de 1 % | Comparación de dashboards |
+| MDM | Entidades maestras con data owner asignado | 0 de 5 | 5 de 5 | Catálogo de datos |
+| Control de versiones | Porcentaje de modelos replicables | 20 % | 95 % o más | Prueba trimestral de recreación de modelos |
+| Control de versiones | Cambios con Pull Request revisado | 0 % | 100 % | Reglas de protección de rama |
+| IaC | Tiempo de onboarding de un científico de datos nuevo | 5 días | Menos de 1 día | Seguimiento de cada ingreso |
+| IaC | Infraestructura definida como código | Casi 0 % | 90 % o más | Inventario frente a repositorio |
+| CD | Tiempo de recuperación ante fallos | 8 horas | Menos de 1 hora | Registro de incidentes |
+| CD | Despliegues fallidos | 25 % | Menos de 5 % | Historial del pipeline |
+| Global | Satisfacción de clientes (CSAT) | A medir | Aumento sostenido | Encuesta semestral |
+
+### 6.3 Informe ejecutivo
+
+**Para:** Dirección General de DataCorp Analytics
+**De:** Michelle Ruiz, equipo de ciencia de datos
+**Asunto:** Propuesta para implementar DataOps y recuperar la confianza de nuestros clientes
+**Fecha:** octubre de 2026
+
+**1. Resumen ejecutivo**
+
+DataCorp Analytics vende análisis predictivo al sector retail, y su activo más valioso es la confianza de los clientes en sus resultados. Hoy el equipo de ciencia de datos trabaja directamente sobre la base de datos de producción, lo que ha causado corrupción de datos, caídas del servicio y desconfianza de nuestros stakeholders. Este informe propone adoptar un enfoque DataOps sustentado en tres elementos, primero los entornos aislados, segundo la gestión de datos maestros (MDM) y automatización con control de versiones, y finalmente la infraestructura como código (IaC) y entrega continua (CD). Solicitamos a la Dirección aprobar un plan de 24 semanas, ejecutado en cinco fases, con el equipo y las herramientas descritos más adelante.
+
+**2. Riesgos actuales**
+
+Trabajar sobre producción nos expone a riesgos que ya se han materializado y que seguirán creciendo con el número de clientes sin embargo cualquier error pequeño puede dañar o borrar información importante y llegar de inmediato a quienes usan nuestro servicio, sin una forma sencilla de deshacerlo. Además, las pruebas y los análisis pesados usan los mismos recursos que atienden a los clientes así que el servicio puede ponerse lento o dejar de funcionar. A esto se suma que no guardamos un registro claro de cómo se obtuvo cada resultado, por lo que no siempre podemos repetirlo ni explicarlo y áreas como marketing y ventas entienden de forma distinta quién es un "cliente activo" de manera que sus cifras no coinciden. Como los datos no están ordenados ni unificados, aparecen registros repetidos o contradictorios que confunden los análisis y si la información de partida es mala, los resultados también lo serán (garbage in garbage out). Por último, manejar datos personales reales sin controles suficientes puede incumplir la Ley 1581 de 2012 y costarnos sanciones y la confianza de los clientes y como buena parte del conocimiento está en las personas que hacen los cambios a mano, incorporar a alguien nuevo es lento y la operación depende demasiado de unos pocos.
+
+**3. Solución propuesta**
+
+Con esto proponemos la "tripleta del control" que responde tres pregunta, dónde trabajamos, sobre qué trabajamos y cómo trabajamos.
+Para ordenar el trabajo separaremos el espacio en tres ambientes, uno para experimentar con información de prueba, otro para revisar que todo funcione con una copia de los datos reales a la que se le quitó la información personal, y un tercero el que usan los clientes con acceso muy limitado y al que solo llegan cambios ya revisados y aprobados. Así los científicos de datos dejarán de modificar directamente lo que ven los clientes. Además toda la información importante de la empresa, como clientes, productos, proveedores, ubicaciones y finanzas quedará reunida en un único registro confiable con responsables definidos, reglas para mantenerla en buen estado y una sola definición oficial de "cliente activo" que todas las áreas usarán. Finalmente  cada cambio quedará guardado y será revisado por otra persona antes de aplicarse, los ambientes se podrán crear siempre iguales con una sola instrucción y un proceso automático hará las pruebas necesarias, entrenará y verificará el modelo y lo irá moviendo por cada ambiente hasta que una persona autorice su llegada a los clientes.
+
+**4. Beneficios esperados**
+
+Con este cambio esperamos tener un servicio mucho más estable y pasar de cuatro problemas al mes en producción a uno o ninguno y arreglar los que ocurran en menos de una hora en lugar de las ocho que tardamos hoy. También ganaremos confianza, porque las cifras de todas las áreas coincidirán casi por completo (con una diferencia menor al 1 %) y podremos mostrarle a cada cliente cómo se llegó a un resultado.
+
+**5. Plan de implementación**
+
+El plan durará 24 semanas y avanzará por etapas. En las primeras dos semanas revisaremos cómo estamos hoy para tener un punto de comparación y formaremos el comité que se encargará de cuidar y ordenar la información de la empresa. Entre las semanas 3 y 6 prepararemos los tres ambientes de trabajo, y entre las semanas 5 y 8 haremos que todo el código, las configuraciones y los procesos queden guardados con su historial de cambios. De la semana 9 a la 14 construiremos el proceso automático que prueba y lleva cada mejora de un ambiente a otro. A su vez de la semana 7 a la 18 iremos ordenando y unificando los datos de la empresa empezando por los de los clientes. Finalmente entre las semanas 19 y 24 pasaremos los modelos que ya existen al nuevo modo de trabajo, capacitaremos al equipo y compararemos los resultados con la situación inicial. Durante todo el proceso mediremos el avance con los indicadores definidos y se lo informaremos a la Dirección cada mes.
+
+**6. Recursos necesarios**
+
+- **Personas:** un líder de DataOps, un ingeniero de plataforma o DevOps, un ingeniero de datos, un data steward y la participación parcial de los dueños de datos de cada área.
+- **Herramientas:** Git y GitHub, un servicio de integración continua, Terraform, DVC, MLflow, una herramienta de calidad de datos (por ejemplo Great Expectations) y un catálogo de datos.
+- **Infraestructura:** cuenta en la nube con tres entornos separados; el costo mensual adicional se cotizará en la Fase 1.
+- **Capacitación:** talleres de Git, Terraform y buenas prácticas de DataOps para todo el equipo.
+- **Presupuesto:** estimado a partir de los costos de personal, licencias y nube; se presentará con cifras en la Fase 0.
+
+**7. Decisión solicitada**
+
+Solicitamos a la Dirección aprobar el inicio de la Fase 0, designar a los dueños de datos de cada entidad maestra y autorizar la restricción de la escritura directa en producción.
+
+### 6.4 Arquitectura DataOps completa de DataCorp Analytics
+
+```mermaid
+flowchart TB
+    subgraph SG_F["Fuentes transaccionales"]
+        S1["CRM"]
+        S2["ERP"]
+        S3["POS"]
+        S4["E-commerce"]
+    end
+
+    subgraph SG_M["Gestión de datos maestros (MDM)"]
+        M1["Ingesta a staging"] --> M2["Limpieza y validación de calidad"]
+        M2 --> M3["Matching y deduplicación"]
+        M3 --> M4["Resolución de conflictos"]
+        M4 --> M5[("Registro maestro")]
+        GOV["Gobernanza: data owners y data steward"] -.-> M5
+    end
+
+    subgraph SG_G["Control de versiones"]
+        G1["Repositorio Git: código, configuración, pipelines, Terraform y procedencia"] --> G2["Pull Request y revisión"]
+    end
+
+    subgraph SG_C["Entrega continua (CD)"]
+        C1["Build & Test"] --> C2["Test de Datos"]
+        C2 --> C3["Train & Validate"]
+        C3 --> C4["Empaquetado"]
+    end
+
+    subgraph SG_E["Entornos aislados"]
+        DEV["DEV: datos sintéticos"]
+        QA["QA: réplica anonimizada"]
+        PROD["PROD: datos reales"]
+    end
+
+    TF["Infraestructura como Código: Terraform"]
+
+    S1 --> M1
+    S2 --> M1
+    S3 --> M1
+    S4 --> M1
+
+    M5 -->|"muestras sintéticas"| DEV
+    M5 -->|"datos anonimizados"| QA
+    M5 -->|"datos completos"| PROD
+
+    DEV --> G1
+    G2 -->|"merge a main"| C1
+    C4 --> QA
+    QA -->|"aprobación manual"| PROD
+
+    TF -.-> DEV
+    TF -.-> QA
+    TF -.-> PROD
+
+    C1 -. falla .-> G1
+    C2 -. falla .-> G1
+    C3 -. falla .-> G1
+
+    PROD --> OBS["Monitoreo y alertas"]
+    PROD --> CLI["Clientes: dashboards y predicciones"]
+    OBS -.->|"incidente o rollback"| G1
+```
+
+**Cómo se integran los elementos**
+
+| Elemento | Dónde aparece | Qué aporta |
+|---|---|---|
+| Entornos aislados | DEV, QA y PROD | Aíslan los cambios experimentales del estado estable de producción |
+| MDM | Fuentes, proceso de consolidación y registro maestro | Una única fuente de la verdad con datos limpios y definiciones oficiales |
+| Control de versiones | Repositorio Git y Pull Request | Trazabilidad y revisión de todo lo que cambia |
+| IaC | Terraform sobre los tres entornos | Entornos idénticos y reproducibles |
+| CD | Pipeline de cuatro etapas hasta QA, y aprobación manual a PROD | Automatiza las validaciones y las promociones |
+| Monitoreo | Salida de PROD | Detecta incidentes y alimenta nuevos ciclos de corrección |
+
